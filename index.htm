@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Galaxy with Pictures</title>
+    <title>Pashasha</title>
     <style>
         * {
             margin: 0;
@@ -63,8 +63,6 @@
 </head>
 <body>
   <div id="container">
-        <div class="controls">
-        </div>
 
         <!-- 🎵 Music autoplay + loop -->
         <audio autoplay loop>
@@ -74,13 +72,14 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        let scene, camera, renderer, galaxySphere, heartSystem, pictureGroup;
+        let scene, camera, renderer, galaxySphere, heartSystem, pictureGroup, flowerSystem, mainGroup;
         let mouse = { x: 0, y: 0 };
         let isDragging = false;
         let autoRotate = true;
         let pictureCards = [];
         let hearts = [];
         let floatingTexts = [];
+        let flowers = [];
 
         // Text messages to display
         const messages = ["iloveyouuu", "imissyouuu", "avaaa", "pashasha", "ayana"];
@@ -114,13 +113,14 @@
             renderer.setClearColor(0x000000, 1);
             document.getElementById('container').appendChild(renderer.domElement);
             
+            // Create main group that will contain everything that rotates together
+            mainGroup = new THREE.Group();
+            scene.add(mainGroup);
+            
             createGalaxySphere();
             createFloatingPictures();
             createHeartSystem();
-            
-            // Create picture group for unified rotation
-            pictureGroup = new THREE.Group();
-            scene.add(pictureGroup);
+            createFlowerSystem();
             
             // Event listeners
             addEventListeners();
@@ -170,7 +170,7 @@
             });
             
             galaxySphere = new THREE.Mesh(geometry, material);
-            scene.add(galaxySphere);
+            mainGroup.add(galaxySphere);
             
             // Add inner glow
             const glowGeometry = new THREE.SphereGeometry(3.8, 32, 32);
@@ -185,69 +185,56 @@
 
         function createFloatingPictures() {
             const loader = new THREE.TextureLoader();
+            pictureGroup = new THREE.Group();
             
             pictureData.forEach((data, index) => {
-                // Create picture frame with depth for 3D effect
-                const frameGeometry = new THREE.BoxGeometry(2, 2, 0.1);
+                // Create back-to-back picture frames
+                const frameGeometry = new THREE.PlaneGeometry(2, 2);
                 
                 // Load texture
                 loader.load(
                     data.src,
                     (texture) => {
-                        // Picture loaded successfully
+                        // Front picture
                         const frontMaterial = new THREE.MeshBasicMaterial({
                             map: texture,
                             transparent: true,
                             opacity: 0.9
                         });
                         
-                        // Materials for each face of the box
-                        const materials = [
-                            new THREE.MeshBasicMaterial({ color: 0x333333 }), // right
-                            new THREE.MeshBasicMaterial({ color: 0x333333 }), // left
-                            new THREE.MeshBasicMaterial({ color: 0x333333 }), // top
-                            new THREE.MeshBasicMaterial({ color: 0x333333 }), // bottom
-                            frontMaterial, // front (the picture)
-                            new THREE.MeshBasicMaterial({ color: 0x222222 }) // back
-                        ];
+                        const frontPicture = new THREE.Mesh(frameGeometry, frontMaterial);
+                        frontPicture.position.set(data.position[0], data.position[1], data.position[2]);
                         
-                        const pictureMesh = new THREE.Mesh(frameGeometry, materials);
-                        pictureMesh.position.set(data.position[0], data.position[1], data.position[2]);
+                        // Back picture (same image but flipped)
+                        const backMaterial = new THREE.MeshBasicMaterial({
+                            map: texture,
+                            transparent: true,
+                            opacity: 0.9
+                        });
                         
-                        pictureGroup.add(pictureMesh);
-                        pictureCards.push(pictureMesh);
+                        const backPicture = new THREE.Mesh(frameGeometry, backMaterial);
+                        backPicture.position.set(data.position[0], data.position[1], data.position[2]);
+                        backPicture.rotation.y = Math.PI; // Flip 180 degrees
+                        
+                        // Create a group for both sides
+                        const pictureCard = new THREE.Group();
+                        pictureCard.add(frontPicture);
+                        pictureCard.add(backPicture);
+                        
+                        pictureGroup.add(pictureCard);
+                        pictureCards.push(pictureCard);
                     },
                     undefined,
                     (error) => {
                         // If image fails to load, create a placeholder
                         console.log(`Failed to load ${data.src}, creating placeholder`);
-                        const placeholderMaterial = new THREE.MeshBasicMaterial({
-                            color: 0x444444,
-                            transparent: true,
-                            opacity: 0.6
-                        });
                         
-                        const materials = [
-                            new THREE.MeshBasicMaterial({ color: 0x333333 }), // right
-                            new THREE.MeshBasicMaterial({ color: 0x333333 }), // left
-                            new THREE.MeshBasicMaterial({ color: 0x333333 }), // top
-                            new THREE.MeshBasicMaterial({ color: 0x333333 }), // bottom
-                            placeholderMaterial, // front
-                            new THREE.MeshBasicMaterial({ color: 0x222222 }) // back
-                        ];
-                        
-                        const pictureMesh = new THREE.Mesh(frameGeometry, materials);
-                        pictureMesh.position.set(data.position[0], data.position[1], data.position[2]);
-                        
-                        pictureGroup.add(pictureMesh);
-                        pictureCards.push(pictureMesh);
-                        
-                        // Add text to placeholder
+                        // Create placeholder texture
                         const canvas = document.createElement('canvas');
                         canvas.width = 256;
                         canvas.height = 256;
                         const ctx = canvas.getContext('2d');
-                        ctx.fillStyle = '#666666';
+                        ctx.fillStyle = '#444444';
                         ctx.fillRect(0, 0, 256, 256);
                         ctx.fillStyle = 'white';
                         ctx.font = '20px Arial';
@@ -255,38 +242,33 @@
                         ctx.fillText('Image', 128, 120);
                         ctx.fillText('Not Found', 128, 150);
                         
-                        const textTexture = new THREE.CanvasTexture(canvas);
-                        pictureMesh.material[4].map = textTexture;
-                        pictureMesh.material[4].needsUpdate = true;
+                        const placeholderTexture = new THREE.CanvasTexture(canvas);
+                        
+                        const placeholderMaterial = new THREE.MeshBasicMaterial({
+                            map: placeholderTexture,
+                            transparent: true,
+                            opacity: 0.6
+                        });
+                        
+                        // Front and back placeholders
+                        const frontPicture = new THREE.Mesh(frameGeometry, placeholderMaterial);
+                        frontPicture.position.set(data.position[0], data.position[1], data.position[2]);
+                        
+                        const backPicture = new THREE.Mesh(frameGeometry, placeholderMaterial);
+                        backPicture.position.set(data.position[0], data.position[1], data.position[2]);
+                        backPicture.rotation.y = Math.PI;
+                        
+                        const pictureCard = new THREE.Group();
+                        pictureCard.add(frontPicture);
+                        pictureCard.add(backPicture);
+                        
+                        pictureGroup.add(pictureCard);
+                        pictureCards.push(pictureCard);
                     }
                 );
             });
-        }
-
-        function createHeartGeometry() {
-            // Create heart shape - fixed and properly oriented
-            const heartShape = new THREE.Shape();
             
-            const x = 0, y = 0;
-            // Start from the bottom point of the heart
-            heartShape.moveTo(x, y - 0.5);
-            // Right side of heart
-            heartShape.bezierCurveTo(x, y - 0.5, x + 0.5, y - 0.8, x + 0.5, y - 0.2);
-            heartShape.bezierCurveTo(x + 0.5, y + 0.1, x + 0.3, y + 0.2, x, y + 0.5);
-            // Left side of heart
-            heartShape.bezierCurveTo(x - 0.3, y + 0.2, x - 0.5, y + 0.1, x - 0.5, y - 0.2);
-            heartShape.bezierCurveTo(x - 0.5, y - 0.8, x, y - 0.5, x, y - 0.5);
-
-            const extrudeSettings = {
-                depth: 0.1,
-                bevelEnabled: true,
-                bevelSegments: 5,
-                steps: 2,
-                bevelSize: 0.02,
-                bevelThickness: 0.02
-            };
-
-            return new THREE.ExtrudeGeometry(heartShape, extrudeSettings);
+            mainGroup.add(pictureGroup);
         }
 
         function createHeartSystem() {
@@ -322,29 +304,144 @@
                 
                 const heart = new THREE.Mesh(heartGeometry, heartMaterial);
                 heart.position.set(x, y, z);
-                heart.scale.set(0.3, 0.3, 0.3); // Scale down the 3D heart
+                heart.scale.set(0.3, 0.3, 0.3);
                 
-                // Fix the heart orientation - rotate to face outward properly
-                heart.rotation.x = Math.PI; // Flip the heart right-side up
-                heart.rotation.y = Math.random() * Math.PI * 2; // Random Y rotation
-                heart.rotation.z = Math.random() * Math.PI * 0.5; // Small Z rotation for variety
+                heart.rotation.x = Math.PI;
+                heart.rotation.y = Math.random() * Math.PI * 2;
+                heart.rotation.z = Math.random() * Math.PI * 0.5;
                 
                 heartSystem.add(heart);
                 hearts.push(heart);
             }
             
-            scene.add(heartSystem);
+            mainGroup.add(heartSystem);
             
             // Start spawning floating texts
-            setInterval(spawnFloatingText, 2000); // Every 2 seconds
+            setInterval(spawnFloatingText, 2000);
+        }
+
+        function createFlowerGeometry() {
+            // Create a flower shape using multiple circles for petals
+            const flowerGroup = new THREE.Group();
+            
+            // Flower center
+            const centerGeometry = new THREE.CircleGeometry(0.1, 8);
+            const centerMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffff00,
+                transparent: true,
+                opacity: 0.8
+            });
+            const center = new THREE.Mesh(centerGeometry, centerMaterial);
+            flowerGroup.add(center);
+            
+            // Petals
+            const petalGeometry = new THREE.CircleGeometry(0.2, 8);
+            const petalColors = [0xff69b4, 0xff1493, 0xffc0cb, 0xdda0dd, 0x9370db];
+            
+            for (let i = 0; i < 5; i++) {
+                const angle = (i / 5) * Math.PI * 2;
+                const petalMaterial = new THREE.MeshBasicMaterial({
+                    color: petalColors[i % petalColors.length],
+                    transparent: true,
+                    opacity: 0.7
+                });
+                
+                const petal = new THREE.Mesh(petalGeometry, petalMaterial);
+                petal.position.x = Math.cos(angle) * 0.15;
+                petal.position.y = Math.sin(angle) * 0.15;
+                petal.position.z = 0.01;
+                
+                flowerGroup.add(petal);
+            }
+            
+            return flowerGroup;
+        }
+
+        function createFlowerSystem() {
+            flowerSystem = new THREE.Group();
+            
+            // Create initial flowers
+            for (let i = 0; i < 100; i++) {
+                createFallingFlower();
+            }
+            
+            mainGroup.add(flowerSystem);
+            
+            // Continuously spawn new flowers
+            setInterval(() => {
+                if (flowers.length < 150) {
+                    createFallingFlower();
+                }
+            }, 500);
+        }
+
+        function createFallingFlower() {
+            const flower = createFlowerGeometry();
+            
+            // Random starting position above the scene
+            const radius = 15 + Math.random() * 10;
+            const angle = Math.random() * Math.PI * 2;
+            
+            flower.position.x = Math.cos(angle) * radius;
+            flower.position.y = 20 + Math.random() * 10; // Start high above
+            flower.position.z = Math.sin(angle) * radius;
+            
+            // Random scale
+            const scale = 0.5 + Math.random() * 1;
+            flower.scale.set(scale, scale, scale);
+            
+            // Random rotation
+            flower.rotation.x = Math.random() * Math.PI * 2;
+            flower.rotation.y = Math.random() * Math.PI * 2;
+            flower.rotation.z = Math.random() * Math.PI * 2;
+            
+            // Add animation properties
+            flower.userData = {
+                fallSpeed: 0.02 + Math.random() * 0.03,
+                rotationSpeed: {
+                    x: (Math.random() - 0.5) * 0.05,
+                    y: (Math.random() - 0.5) * 0.05,
+                    z: (Math.random() - 0.5) * 0.05
+                },
+                sway: {
+                    amplitude: 0.5 + Math.random() * 1,
+                    frequency: 0.01 + Math.random() * 0.02,
+                    offset: Math.random() * Math.PI * 2
+                }
+            };
+            
+            flowerSystem.add(flower);
+            flowers.push(flower);
+        }
+
+        function createHeartGeometry() {
+            // Create heart shape - fixed and properly oriented
+            const heartShape = new THREE.Shape();
+            
+            const x = 0, y = 0;
+            // Start from the bottom point of the heart
+            heartShape.moveTo(x, y - 0.5);
+            // Right side of heart
+            heartShape.bezierCurveTo(x, y - 0.5, x + 0.5, y - 0.8, x + 0.5, y - 0.2);
+            heartShape.bezierCurveTo(x + 0.5, y + 0.1, x + 0.3, y + 0.2, x, y + 0.5);
+            // Left side of heart
+            heartShape.bezierCurveTo(x - 0.3, y + 0.2, x - 0.5, y + 0.1, x - 0.5, y - 0.2);
+            heartShape.bezierCurveTo(x - 0.5, y - 0.8, x, y - 0.5, x, y - 0.5);
+
+            const extrudeSettings = {
+                depth: 0.1,
+                bevelEnabled: true,
+                bevelSegments: 5,
+                steps: 2,
+                bevelSize: 0.02,
+                bevelThickness: 0.02
+            };
+
+            return new THREE.ExtrudeGeometry(heartShape, extrudeSettings);
         }
 
         function create3DText(text) {
             // Create 3D text geometry using TextGeometry
-            const loader = new THREE.FontLoader();
-            
-            // We'll create a simple 3D text using shapes since we don't have font files
-            // Instead, let's create extruded text using simple shapes for each character
             const textGroup = new THREE.Group();
             
             // Create a box for each character to simulate 3D text
@@ -435,7 +532,7 @@
                 }
             };
             
-            scene.add(textMesh);
+            scene.add(textMesh); // Text doesn't rotate with main group
             floatingTexts.push(textMesh);
         }
 
@@ -467,17 +564,9 @@
                 const deltaX = event.clientX - mouse.x;
                 const deltaY = event.clientY - mouse.y;
                 
-                // Rotate galaxy
-                galaxySphere.rotation.y += deltaX * 0.01;
-                galaxySphere.rotation.x += deltaY * 0.01;
-                
-                // Rotate heart system
-                heartSystem.rotation.y += deltaX * 0.008;
-                heartSystem.rotation.x += deltaY * 0.008;
-                
-                // Rotate picture group
-                pictureGroup.rotation.y += deltaX * 0.005;
-                pictureGroup.rotation.x += deltaY * 0.005;
+                // Rotate the entire main group (galaxy, hearts, pictures, flowers)
+                mainGroup.rotation.y += deltaX * 0.01;
+                mainGroup.rotation.x += deltaY * 0.01;
                 
                 mouse.x = event.clientX;
                 mouse.y = event.clientY;
@@ -510,14 +599,9 @@
                 const deltaX = event.touches[0].clientX - touchStartX;
                 const deltaY = event.touches[0].clientY - touchStartY;
                 
-                galaxySphere.rotation.y += deltaX * 0.01;
-                galaxySphere.rotation.x += deltaY * 0.01;
-                
-                heartSystem.rotation.y += deltaX * 0.008;
-                heartSystem.rotation.x += deltaY * 0.008;
-                
-                pictureGroup.rotation.y += deltaX * 0.005;
-                pictureGroup.rotation.x += deltaY * 0.005;
+                // Rotate the entire main group
+                mainGroup.rotation.y += deltaX * 0.01;
+                mainGroup.rotation.x += deltaY * 0.01;
                 
                 touchStartX = event.touches[0].clientX;
                 touchStartY = event.touches[0].clientY;
@@ -537,69 +621,94 @@
         function animate() {
             requestAnimationFrame(animate);
             
+            const time = Date.now() * 0.001;
+            
             // Auto rotation
             if (autoRotate && !isDragging) {
-                galaxySphere.rotation.y += 0.004;
-                heartSystem.rotation.y += 0.001; // Slower heart rotation to match pictures
-                pictureGroup.rotation.y += 0.001; // Auto rotate picture group too
+                mainGroup.rotation.y += 0.002; // Slower unified rotation
                 
-                // Make pictures stay in position with slight floating motion
-                pictureCards.forEach((picture, index) => {
-                    const time = Date.now() * 0.001;
-                    
+                // Individual picture card animations
+                pictureCards.forEach((pictureCard, index) => {
                     // Keep original positions from pictureData
                     const originalPos = pictureData[index].position;
-                    picture.position.x = originalPos[0];
-                    picture.position.z = originalPos[2];
                     
-                    // Add slight floating motion only
-                    picture.position.y = originalPos[1] + Math.sin(time * 0.5 + index) * 0.2;
+                    // Add gentle floating motion
+                    pictureCard.position.y = originalPos[1] + Math.sin(time * 0.5 + index) * 0.3;
                     
-                    // Add gentle rotation for 3D effect
-                    picture.rotation.y += 0.005;
-                });
-                
-                // Animate floating texts
-                floatingTexts.forEach((text, index) => {
-                    text.userData.age += 0.016; // Roughly 60fps
-                    
-                    // Move down slowly
-                    text.position.y = text.userData.startY - text.userData.age * 1.5;
-                    
-                    // 3D rotation animation
-                    text.rotation.x += text.userData.rotationSpeed.x;
-                    text.rotation.y += text.userData.rotationSpeed.y;
-                    text.rotation.z += text.userData.rotationSpeed.z;
-                    
-                    // Fade out after 3 seconds
-                    if (text.userData.age > 3) {
-                        text.userData.opacity = Math.max(0, 1 - (text.userData.age - 3));
-                        
-                        // Update opacity for all child materials (each letter)
-                        text.children.forEach(letter => {
-                            letter.material.forEach(mat => {
-                                mat.opacity = text.userData.opacity;
-                            });
-                        });
-                    }
-                    
-                    // Remove after 5 seconds
-                    if (text.userData.age > 5) {
-                        scene.remove(text);
-                        
-                        // Dispose of all geometries and materials
-                        text.children.forEach(letter => {
-                            letter.geometry.dispose();
-                            letter.material.forEach(mat => {
-                                if (mat.map) mat.map.dispose();
-                                mat.dispose();
-                            });
-                        });
-                        
-                        floatingTexts.splice(index, 1);
-                    }
+                    // Add gentle rotation around Y-axis so they can show front/back
+                    pictureCard.rotation.y += 0.008;
                 });
             }
+            
+            // Animate falling flowers
+            flowers.forEach((flower, index) => {
+                // Fall down
+                flower.position.y -= flower.userData.fallSpeed;
+                
+                // Swaying motion
+                const swayTime = time + flower.userData.sway.offset;
+                flower.position.x += Math.sin(swayTime * flower.userData.sway.frequency) * flower.userData.sway.amplitude * 0.01;
+                flower.position.z += Math.cos(swayTime * flower.userData.sway.frequency) * flower.userData.sway.amplitude * 0.01;
+                
+                // Rotation
+                flower.rotation.x += flower.userData.rotationSpeed.x;
+                flower.rotation.y += flower.userData.rotationSpeed.y;
+                flower.rotation.z += flower.userData.rotationSpeed.z;
+                
+                // Remove flowers that fall too low and create new ones
+                if (flower.position.y < -25) {
+                    flowerSystem.remove(flower);
+                    
+                    // Dispose of materials and geometries
+                    flower.children.forEach(child => {
+                        child.geometry.dispose();
+                        child.material.dispose();
+                    });
+                    
+                    flowers.splice(index, 1);
+                }
+            });
+            
+            // Animate floating texts (independent of main group rotation)
+            floatingTexts.forEach((text, index) => {
+                text.userData.age += 0.016;
+                
+                // Move down slowly
+                text.position.y = text.userData.startY - text.userData.age * 1.5;
+                
+                // 3D rotation animation
+                text.rotation.x += text.userData.rotationSpeed.x;
+                text.rotation.y += text.userData.rotationSpeed.y;
+                text.rotation.z += text.userData.rotationSpeed.z;
+                
+                // Fade out after 3 seconds
+                if (text.userData.age > 3) {
+                    text.userData.opacity = Math.max(0, 1 - (text.userData.age - 3));
+                    
+                    // Update opacity for all child materials (each letter)
+                    text.children.forEach(letter => {
+                        letter.material.forEach(mat => {
+                            mat.opacity = text.userData.opacity;
+                        });
+                    });
+                }
+                
+                // Remove after 5 seconds
+                if (text.userData.age > 5) {
+                    scene.remove(text);
+                    
+                    // Dispose of all geometries and materials
+                    text.children.forEach(letter => {
+                        letter.geometry.dispose();
+                        letter.material.forEach(mat => {
+                            if (mat.map) mat.map.dispose();
+                            mat.dispose();
+                        });
+                    });
+                    
+                    floatingTexts.splice(index, 1);
+                }
+            });
             
             // Render
             renderer.render(scene, camera);
@@ -612,9 +721,7 @@
 
         function resetView() {
             camera.position.set(0, 0, 15);
-            galaxySphere.rotation.set(0, 0, 0);
-            heartSystem.rotation.set(0, 0, 0);
-            pictureGroup.rotation.set(0, 0, 0);
+            mainGroup.rotation.set(0, 0, 0);
         }
 
         // Initialize when page loads
